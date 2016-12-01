@@ -1,10 +1,8 @@
+import ij.IJ;
 import ij.ImagePlus;
-import ij.gui.Plot;
 import ij.plugin.filter.PlugInFilter;
 import ij.process.ImageProcessor;
 
-import java.util.Arrays;
-import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 /**
@@ -31,10 +29,11 @@ public class AdaptiveThresholding implements PlugInFilter {
 
         long threshNext = -1;
         while (thresh != threshNext) {
+            IJ.log("threshold: " + thresh);
             long meanObj = LongStream.range(0, thresh).reduce(0, (sum, next) ->  sum + (next * histogram[(int) next])) / cumHistogram[(int) thresh];
             long meanBg = LongStream.range(thresh, histogram.length).reduce(0, (sum, next) ->  sum + (next * histogram[(int) next])) / (cumHistogram[histogram.length - 1] - cumHistogram[(int) thresh]);
-            threshNext = (meanObj + meanBg) / 2;
-            thresh = threshNext;
+            threshNext = thresh;
+            thresh = (meanObj + meanBg) / 2;
         }
 
         for (int y = 0; y < ip.getHeight(); y++) {
