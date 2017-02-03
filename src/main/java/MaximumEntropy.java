@@ -37,17 +37,25 @@ public class MaximumEntropy implements PlugInFilter {
         double maxEntropy = -1;
         int optimalThresh = -1;
 
-        for (int i = 0; i < histogram.length - 1; i++) {
-            //TODO implement using shannon entropy formula
+        for (int i = 0; i < histogram.length; i++) {
+
             double objEntropy = 0;
-            for (int x = 0; x < i; x++) {
-                objEntropy -= (normalisedHisto[i] / cumNormHistogram[i]) * Math.log(normalisedHisto[i] / cumNormHistogram[i]);
+            if (cumNormHistogram[i] > Double.MIN_VALUE) {
+                for (int x = 0; x <= i; x++) {
+                    if (normalisedHisto[x] > Double.MIN_VALUE) {
+                        objEntropy -= (normalisedHisto[x] / cumNormHistogram[i]) * Math.log(normalisedHisto[x] / cumNormHistogram[i]);
+                    }
+                }
             }
 
             double bgFreq = 1 - cumNormHistogram[i];
             double bgEntropy = 0;
-            for (int y = i; y < histogram.length; y++) {
-                bgEntropy = -((normalisedHisto[i] / bgFreq) * Math.log(normalisedHisto[i] / bgFreq));
+            if (bgFreq > Double.MIN_VALUE) {
+                for (int x = i; x < histogram.length; x++) {
+                    if (normalisedHisto[x] > Double.MIN_VALUE) {
+                        bgEntropy -= (normalisedHisto[x] / bgFreq) * Math.log(normalisedHisto[x] / bgFreq);
+                    }
+                }
             }
 
             double sumEntropy = objEntropy + bgEntropy;
