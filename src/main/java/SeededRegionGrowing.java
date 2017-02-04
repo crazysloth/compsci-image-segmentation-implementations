@@ -2,6 +2,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.WindowManager;
 import ij.gui.GenericDialog;
+import ij.gui.NewImage;
 import ij.plugin.filter.PlugInFilter;
 import ij.process.ImageProcessor;
 import util.Pixel;
@@ -24,7 +25,7 @@ public class SeededRegionGrowing implements PlugInFilter {
     private boolean eightConnected = true;
     private ImageProcessor ip;
     private int currentMean;
-    private int currentVariance;
+    private int currentStdDev;
 
     public int setup(String arg, ImagePlus imagePlus) {
         this.width = imagePlus.getWidth();
@@ -35,6 +36,7 @@ public class SeededRegionGrowing implements PlugInFilter {
     public void run(ImageProcessor ip) {
         this.ip = ip;
         ImagePlus seedImage = getSeedImage();
+        int[] ipHisto = this.ip.getHistogram();
 
         if (seedImage == null) {
             return;
@@ -50,7 +52,7 @@ public class SeededRegionGrowing implements PlugInFilter {
                 int value = this.seedPixels[x][y];
                 if (value > 0) {
                     if (regions.containsKey(value)) {
-                        regions.get(value).add(new Pixel(x, y, value));
+                        regions.get(value).add(new Pixel(x, y, this.ip.getPixel(x,y)));
                     } else {
                         if (regions.size() <= MAX_REGIONS) {
                             regions.put(value, new ArrayList<>());
@@ -67,19 +69,32 @@ public class SeededRegionGrowing implements PlugInFilter {
             IJ.log("Growing region with grey level: " + entry.getKey());
             List<Pixel> pixels = entry.getValue();
             this.currentMean = Pixel.calculateMean(pixels);
-            this.currentVariance = Pixel.calculateVariance(pixels, this.currentMean);
+            this.currentStdDev = (int)Math.round(Pixel.calculateStdDev(pixels, this.currentMean) * 1.5);
 
             for (Pixel p : pixels) {
                 growNeighbours(p, entry.getKey());
             }
         }
 
+        ImagePlus resultImage = NewImage.createByteImage("Test", this.width, this.height, 1, NewImage.FILL_WHITE);
+        ImageProcessor resultProcessor = resultImage.getProcessor();
 
+        for (int y = 0; y < this.ip.getHeight(); y++) {
+            for (int x = 0; x < this.ip.getWidth(); x++) {
+                if (this.seedPixels[x][y] > 0) {
+                    int i = 0;
+                }
+                //int adjusted = (int)(this.seedPixels[x][y] / EIGHT_BIT_MAX * ipHisto.length) * 5;
+                resultProcessor.putPixel(x,y, this.seedPixels[x][y] * 50);
+            }
+        }
 
+        resultImage.show();
+        IJ.selectWindow("Test");
     }
 
     private void growPixel(Pixel p, int regionGreyLevel) {
-        if (belongsToARegion(p) || !isInBounds(p) || !meetsGrowCriteria(p)) {
+        if ( !isInBounds(p) || !meetsGrowCriteria(p) || belongsToARegion(p) ) {
             return;
         }
 
@@ -102,8 +117,8 @@ public class SeededRegionGrowing implements PlugInFilter {
     }
 
     private boolean meetsGrowCriteria(Pixel p) {
-        int min = this.currentMean - this.currentVariance;
-        int max = this.currentMean + this.currentVariance;
+        int min = this.currentMean - this.currentStdDev;
+        int max = this.currentMean + this.currentStdDev;
         return p.getGreyLevel() >= min && p.getGreyLevel() <= max;
     }
 
