@@ -169,7 +169,7 @@ public class SeededRegionGrowing implements PlugInFilter {
     }
 
     private boolean isInBounds(Pixel p) {
-        return p.x > 0 && p.y > 0 && p.x < this.width && p.y < this.height;
+        return p.x >= 0 && p.y >= 0 && p.x < this.width && p.y < this.height;
     }
 
     private ImagePlus getSeedImage() {
