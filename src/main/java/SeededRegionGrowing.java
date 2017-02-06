@@ -7,10 +7,7 @@ import ij.plugin.filter.PlugInFilter;
 import ij.process.ImageProcessor;
 import util.Pixel;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Created by jonas on 3/02/17.
@@ -18,14 +15,20 @@ import java.util.Map;
 public class SeededRegionGrowing implements PlugInFilter {
 
     private static final String TITLE = "Seeded Region Growing";
+    private static final String RESULT_WINDOW_TITLE = "Region Growing Result";
+    private static final int MAX_ITERATIONS = 20;
     private static final int MAX_REGIONS = 5;
+    private boolean eightConnected = true;
+    private boolean allowUnassignedRegion = false;
+
     private int width = 0;
     private int height = 0;
     private int[][] seedPixels;
-    private boolean eightConnected = true;
     private ImageProcessor ip;
-    private int currentMean;
-    private int currentStdDev;
+    private Region currentRegionStats;
+    private boolean unassignedPixels = true;
+    private int currentIteration = 1;
+    private double stdDevMultiplier = 1;
 
     public int setup(String arg, ImagePlus imagePlus) {
         this.width = imagePlus.getWidth();
@@ -36,7 +39,6 @@ public class SeededRegionGrowing implements PlugInFilter {
     public void run(ImageProcessor ip) {
         this.ip = ip;
         ImagePlus seedImage = getSeedImage();
-        int[] ipHisto = this.ip.getHistogram();
 
         if (seedImage == null) {
             return;
@@ -45,6 +47,87 @@ public class SeededRegionGrowing implements PlugInFilter {
         ImageProcessor seedIp = seedImage.getProcessor();
         this.seedPixels = seedIp.getIntArray();
 
+        Map<Integer, List<Pixel>> regions;
+
+        while (unassignedPixels && currentIteration <= MAX_ITERATIONS) {
+            IJ.log("Starting iteration " + this.currentIteration + " unassigned pixels: " + this.unassignedPixels + " std dev multiply: " + this.stdDevMultiplier);
+            regions = findRegions(seedIp);
+            for (Map.Entry<Integer, List<Pixel>> entry : regions.entrySet()) {
+                IJ.log("Growing region with grey level: " + entry.getKey());
+                List<Pixel> pixels = entry.getValue();
+                this.currentRegionStats = new Region();
+                this.currentRegionStats.numPixels = pixels.size();
+                this.currentRegionStats.regionGreyLevel = entry.getKey();
+                this.currentRegionStats.mean = Pixel.calculateMean(pixels);
+                this.currentRegionStats.rollingSum = Pixel.calculateSum(pixels);
+                this.currentRegionStats.rollingDeviations = Pixel.calculateDeviationDifferenceSum(pixels, this.currentRegionStats.mean);
+                this.currentRegionStats.stdDev = (int)Math.round((double)Pixel.calculateStdDev(pixels, this.currentRegionStats.mean) * this.stdDevMultiplier);
+
+                Queue<Pixel> pixelQ = new LinkedList<>();
+
+                for (Pixel regionPixel : pixels) {
+                    pixelQ = addNeighboursToQueue(pixelQ, regionPixel);
+
+                    while (!pixelQ.isEmpty()) {
+                        Pixel p = pixelQ.remove();
+
+                        if ( isInBounds(p) && meetsGrowCriteria(p) && !belongsToARegion(p)) {
+                            this.seedPixels[p.x][p.y] = this.currentRegionStats.regionGreyLevel;
+
+                            this.currentRegionStats.numPixels += 1;
+                            this.currentRegionStats.rollingSum = Math.addExact(this.currentRegionStats.rollingSum, (long)p.getGreyLevel());
+                            this.currentRegionStats.mean = Math.round(this.currentRegionStats.rollingSum / this.currentRegionStats.numPixels);
+                            this.currentRegionStats.rollingDeviations = Math.addExact(this.currentRegionStats.rollingDeviations, (long)Math.pow((p.getGreyLevel() - this.currentRegionStats.mean), 2));
+                            double var = this.currentRegionStats.rollingDeviations / this.currentRegionStats.numPixels;
+                            this.currentRegionStats.stdDev = (int)(Math.round(Math.sqrt(var) * this.stdDevMultiplier));
+
+                            pixelQ = addNeighboursToQueue(pixelQ, p);
+
+                        }
+
+                    }
+
+                }
+            }
+            IJ.log("Completed Iteration " + this.currentIteration);
+            this.currentIteration += 1;
+
+            if (!this.allowUnassignedRegion) {
+                this.stdDevMultiplier += 1;
+            }
+        }
+
+        ImagePlus resultImage = NewImage.createByteImage(RESULT_WINDOW_TITLE, this.width, this.height, 1, NewImage.FILL_WHITE);
+        ImageProcessor resultProcessor = resultImage.getProcessor();
+
+        for (int y = 0; y < this.ip.getHeight(); y++) {
+            for (int x = 0; x < this.ip.getWidth(); x++) {
+                resultProcessor.putPixel(x,y, this.seedPixels[x][y] * 75);
+            }
+        }
+
+        resultImage.show();
+        IJ.selectWindow(RESULT_WINDOW_TITLE);
+    }
+
+    private Queue<Pixel> addNeighboursToQueue(Queue<Pixel> pixelQ, Pixel p) {
+        pixelQ.add(new Pixel(p.x+1, p.y, this.ip.getPixel(p.x+1, p.y)));
+        pixelQ.add(new Pixel(p.x-1, p.y, this.ip.getPixel(p.x-1, p.y)));
+        pixelQ.add(new Pixel(p.x, p.y+1, this.ip.getPixel(p.x, p.y+1)));
+        pixelQ.add(new Pixel(p.x, p.y-1, this.ip.getPixel(p.x, p.y-1)));
+
+        if (this.eightConnected) {
+            pixelQ.add(new Pixel(p.x+1, p.y+1, this.ip.getPixel(p.x+1, p.y+1)));
+            pixelQ.add(new Pixel(p.x-1, p.y-1, this.ip.getPixel(p.x-1, p.y-1)));
+            pixelQ.add(new Pixel(p.x+1, p.y-1, this.ip.getPixel(p.x+1, p.y-1)));
+            pixelQ.add(new Pixel(p.x-1, p.y+1, this.ip.getPixel(p.x-1, p.y+1)));
+        }
+
+        return pixelQ;
+    }
+
+    private Map<Integer, List<Pixel>> findRegions(ImageProcessor seedIp) {
+        int unassignedPixelCount = 0;
         Map<Integer, List<Pixel>> regions = new HashMap<>();
 
         for (int x = 0; x < seedIp.getWidth(); x++) {
@@ -58,67 +141,26 @@ public class SeededRegionGrowing implements PlugInFilter {
                             regions.put(value, new ArrayList<>());
                         } else {
                             IJ.error(TITLE, "Too many regions, only " + MAX_REGIONS + " supported");
-                            return;
+                            return null;
                         }
                     }
+                } else {
+                   unassignedPixelCount += 1;
                 }
             }
         }
 
-        for (Map.Entry<Integer, List<Pixel>> entry : regions.entrySet()) {
-            IJ.log("Growing region with grey level: " + entry.getKey());
-            List<Pixel> pixels = entry.getValue();
-            this.currentMean = Pixel.calculateMean(pixels);
-            this.currentStdDev = (int)Math.round(Pixel.calculateStdDev(pixels, this.currentMean) * 1.5);
-
-            for (Pixel p : pixels) {
-                growNeighbours(p, entry.getKey());
-            }
+        if (unassignedPixelCount == 0) {
+            this.unassignedPixels = false;
         }
 
-        ImagePlus resultImage = NewImage.createByteImage("Test", this.width, this.height, 1, NewImage.FILL_WHITE);
-        ImageProcessor resultProcessor = resultImage.getProcessor();
-
-        for (int y = 0; y < this.ip.getHeight(); y++) {
-            for (int x = 0; x < this.ip.getWidth(); x++) {
-                if (this.seedPixels[x][y] > 0) {
-                    int i = 0;
-                }
-                //int adjusted = (int)(this.seedPixels[x][y] / EIGHT_BIT_MAX * ipHisto.length) * 5;
-                resultProcessor.putPixel(x,y, this.seedPixels[x][y] * 50);
-            }
-        }
-
-        resultImage.show();
-        IJ.selectWindow("Test");
-    }
-
-    private void growPixel(Pixel p, int regionGreyLevel) {
-        if ( !isInBounds(p) || !meetsGrowCriteria(p) || belongsToARegion(p) ) {
-            return;
-        }
-
-        this.seedPixels[p.x][p.y] = regionGreyLevel;
-        growNeighbours(p, regionGreyLevel);
-    }
-
-    private void growNeighbours(Pixel p, int regionGreyLevel) {
-        growPixel(new Pixel(p.x++, p.y, this.ip.getPixel(p.x++, p.y)), regionGreyLevel);
-        growPixel(new Pixel(p.x--, p.y, this.ip.getPixel(p.x--, p.y)), regionGreyLevel);
-        growPixel(new Pixel(p.x, p.y++, this.ip.getPixel(p.x, p.y++)), regionGreyLevel);
-        growPixel(new Pixel(p.x, p.y--, this.ip.getPixel(p.x, p.y--)), regionGreyLevel);
-
-        if (this.eightConnected) {
-            growPixel(new Pixel(p.x++, p.y++, this.ip.getPixel(p.x++, p.y++)), regionGreyLevel);
-            growPixel(new Pixel(p.x--, p.y--, this.ip.getPixel(p.x--, p.y--)), regionGreyLevel);
-            growPixel(new Pixel(p.x++, p.y--, this.ip.getPixel(p.x++, p.y--)), regionGreyLevel);
-            growPixel(new Pixel(p.x--, p.y++, this.ip.getPixel(p.x--, p.y++)), regionGreyLevel);
-        }
+        IJ.log("Unassigned pixels in region: " + unassignedPixelCount);
+        return regions;
     }
 
     private boolean meetsGrowCriteria(Pixel p) {
-        int min = this.currentMean - this.currentStdDev;
-        int max = this.currentMean + this.currentStdDev;
+        int min = this.currentRegionStats.mean - this.currentRegionStats.stdDev;
+        int max = this.currentRegionStats.mean + this.currentRegionStats.stdDev;
         return p.getGreyLevel() >= min && p.getGreyLevel() <= max;
     }
 
@@ -155,11 +197,17 @@ public class SeededRegionGrowing implements PlugInFilter {
 
         final String[] seedTitles = seedTitleList.toArray(new String[seedTitleList.size()]);
 
+        //Dialog begins here
         final GenericDialog gd = new GenericDialog(TITLE, IJ.getInstance());
         gd.addChoice("Seeds:", seedTitles, seedTitles[0]);
+        gd.addCheckbox("8-Connected Neighbourhood", this.eightConnected);
+        gd.addCheckbox("Allow Unassigned Region (Don't allow X*stdDev to increase)", this.allowUnassignedRegion);
         gd.showDialog();
 
+        //Retrieve dialog values
         final ImagePlus seeds = WindowManager.getImage(seedTitles[gd.getNextChoiceIndex()]);
+        this.eightConnected = gd.getNextBoolean();
+        this.allowUnassignedRegion = gd.getNextBoolean();
 
         if (seeds.getHeight() != this.height || seeds.getWidth() != this.width) {
             IJ.error(TITLE, "Seed image has different size to image. This is the wrong seed for this image.");
@@ -169,4 +217,12 @@ public class SeededRegionGrowing implements PlugInFilter {
         return seeds;
     }
 
+    class Region {
+        public long rollingSum = 0;
+        public long rollingDeviations = 0;
+        public int regionGreyLevel = -1;
+        public int numPixels = 0;
+        public int mean = 0;
+        public int stdDev = 0;
+    }
 }
