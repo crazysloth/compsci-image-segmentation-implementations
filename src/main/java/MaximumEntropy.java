@@ -1,3 +1,4 @@
+import ij.IJ;
 import ij.ImagePlus;
 import ij.plugin.filter.PlugInFilter;
 import ij.process.ImageProcessor;
@@ -8,10 +9,15 @@ import ij.process.ImageProcessor;
 public class MaximumEntropy implements PlugInFilter {
 
     public int setup(String arg, ImagePlus imagePlus) {
-        return DOES_16;
+        return DOES_16 | DOES_STACKS;
     }
 
     public void run(ImageProcessor ip) {
+        //PluginInFilter will run all stacks under the hood if setup like this
+        process(ip);
+    }
+
+    private void process(ImageProcessor ip) {
         int[] histogram = ip.getHistogram();
         double totalPixels = ip.getWidth() * ip.getHeight();
 
@@ -65,6 +71,8 @@ public class MaximumEntropy implements PlugInFilter {
                 optimalThresh = i;
             }
         }
+
+        IJ.log("threshold: " + optimalThresh);
 
         for (int y = 0; y < ip.getHeight(); y++) {
             for (int x = 0; x < ip.getWidth(); x++) {

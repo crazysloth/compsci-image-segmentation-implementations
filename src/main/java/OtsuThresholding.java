@@ -9,16 +9,22 @@ import ij.process.ImageProcessor;
 public class OtsuThresholding implements PlugInFilter {
 
     public int setup(String arg, ImagePlus imagePlus) {
-        return DOES_16;
+        return DOES_16 | DOES_STACKS;
     }
 
     public void run(ImageProcessor ip) {
+        //PluginInFilter will run all stacks under the hood if setup like this
+        process(ip);
+    }
+
+    private void process(ImageProcessor ip) {
         int[] histogram = ip.getHistogram();
 
         int[] cumHistogram = new int[histogram.length];
 
         long totalMeanSum = 0;
 
+        cumHistogram[0] = histogram[0];
         for (int i = 1; i < cumHistogram.length; i++) {
             cumHistogram[i] = cumHistogram[i - 1] + histogram[i];
             totalMeanSum += i * histogram[i];
@@ -28,10 +34,10 @@ public class OtsuThresholding implements PlugInFilter {
         double maxVar = 0;
         int optimalThresh = 0;
 
-        for (int i = 0; i < histogram.length - 1; i++) {
+        for (int i = 0; i < histogram.length; i++) {
             sumMeanObg += i * histogram[i];
 
-            if (sumMeanObg == 0) {
+            if (sumMeanObg == 0 || totalMeanSum == sumMeanObg) {
                 continue;
             }
 

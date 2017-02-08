@@ -33,10 +33,15 @@ public class SeededRegionGrowing implements PlugInFilter {
     public int setup(String arg, ImagePlus imagePlus) {
         this.width = imagePlus.getWidth();
         this.height = imagePlus.getHeight();
-        return DOES_16 | DOES_8G;
+        return DOES_16 | DOES_8G | DOES_STACKS;
     }
 
     public void run(ImageProcessor ip) {
+        //PluginInFilter will run all stacks under the hood if setup like this
+        process(ip);
+    }
+
+    private void process(ImageProcessor ip) {
         this.ip = ip;
         ImagePlus seedImage = getSeedImage();
 
