@@ -49,6 +49,10 @@ public class SeededRegionGrowing implements PlugInFilter {
             return;
         }
 
+        if (this.allowUnassignedRegion) {
+            this.stdDevMultiplier = 3;
+        }
+
         ImageProcessor seedIp = seedImage.getProcessor();
         this.seedPixels = seedIp.getIntArray();
 

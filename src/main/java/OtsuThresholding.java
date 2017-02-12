@@ -9,7 +9,8 @@ import ij.process.ImageProcessor;
 public class OtsuThresholding implements PlugInFilter {
 
     public int setup(String arg, ImagePlus imagePlus) {
-        return DOES_16 | DOES_STACKS;
+        IJ.log("Running Otsu");
+        return DOES_16 | DOES_8G | DOES_STACKS;
     }
 
     public void run(ImageProcessor ip) {
