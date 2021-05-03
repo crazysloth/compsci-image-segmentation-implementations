@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>nz.ac.auckland</groupId>
-    <artifactId>uoa-image-processing_</artifactId>
+    <artifactId>thresholding_image_segmentation_</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>
