@@ -1,4 +1,4 @@
-# ImageJ Plugin Of Thresholding Based Image Segmentation Algorithms
+# ImageJ Plugin - Thresholding Based Image Segmentation Algorithms
 
 Image segmentation describes a set of techniques that provide a way of labeling pixels based on statistically significant patterns found within the image.
 This repo contains an ImageJ plugin with a collection of global thresholding techniques. Thresholding methods use statistical information present in the image histogram to determine a single threshold that separates the region of interest from the background. 
