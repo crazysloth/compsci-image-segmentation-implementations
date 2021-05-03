@@ -39,6 +39,7 @@ public class SeededRegionGrowing implements PlugInFilter {
         this.height = imagePlus.getHeight();
         this.seedImage = getSeedImage();
         this.imagePlus = imagePlus;
+        IJ.log("Recalculate mean: " + this.recalculateMeanAfterGrow);
         return DOES_16 | DOES_8G | DOES_STACKS;
     }
 
